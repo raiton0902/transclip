@@ -3,7 +3,7 @@
 Local audio/video transcription skill following a fixed 4-step workflow:
 **context → transcribe → re-check → output**. No cloud, no API — everything runs
 on your machine with [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-on CPU.
+on CPU. Best for support agent when clipping long form video into short form, without losing any context of audio content.  
 
 ## Install
 
