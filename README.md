@@ -1,4 +1,4 @@
-# transclip
+# Transclip
 
 Local audio/video transcription skill following a fixed 4-step workflow:
 **context → transcribe → re-check → output**. No cloud, no API — everything runs
