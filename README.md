@@ -19,17 +19,18 @@ Raw Whisper (`faster-whisper`) spawns captions too early or 150–400 ms off-bea
 
 ---
 
-## Install
+## Get TransClip
+
+TransClip is available as a commercial skill on **agensi.io** *(link your agensi.io product URL here)*.
+
+After downloading the skill bundle from agensi.io:
 
 ```bash
-# 1. Core dependencies (Python 3.9+ and ffmpeg on PATH)
+# 1. Install dependencies (Python 3.9+ and ffmpeg on PATH)
 pip install faster-whisper numpy
 
 # 2. Optional (recommended) for visual mouth-movement lip-sync
 pip install opencv-python-headless mediapipe
-
-# 3. Add as an AI coding agent skill
-npx skills add raiton0902/transclip
 ```
 
 ---
