@@ -1,123 +1,71 @@
 ---
 name: transkrip
-description: Transcribe audio/video locally with faster-whisper following a 4-step workflow — gather context from the user first, transcribe with a context-matched initial_prompt, run an on-point re-check pass to fix wrong words, then output transcript.md/.txt/.srt. Use when the user asks to transcribe a video or audio file, fix auto-generated captions, or produce subtitles in Indonesian (or any other language).
+description: Local CapCut-grade audio/video transcription with faster-whisper, MediaPipe mouth-movement lip-sync + 10 ms speech-band RMS never-early onset alignment, one-word-per-spawn captions (--word-by-word), conversational coherence & hallucination review (--apply-edits), Indonesian+English bilingual glossary auto-fix, RAM-safe worker auto-capping, batch folder mode, and word-level millisecond JSON export (.srt, .md, .txt, transcript_words.json). Use when transcribing videos/audio, generating CapCut-style word-by-word captions, fixing delayed/early subtitles, or transcribing mixed Indonesian-English speech offline.
 ---
 
-# Transkrip — 4-step workflow
+# TransClip (`transkrip`) — 4-Step Audio-Visual Workflow
 
-Everything runs locally (faster-whisper on CPU), no cloud involved. Main script:
-`D:\ChatGPT\skills\transkrip\transcribe.py`
+Everything runs 100% locally (CPU + `faster-whisper` + `mediapipe` + `opencv` + `numpy` + `ffmpeg`), zero API keys required.
+Main script: `D:\ChatGPT\skills\transkrip\transcribe.py`
+Local Python venv: `D:\akuvideo\.venv_transkrip\Scripts\python.exe`
 
 ```powershell
 $env:PYTHONUTF8 = "1"
-& "D:\ChatGPT\skills\lemo-opuscar\.venv\Scripts\python.exe" `
-  "D:\ChatGPT\skills\transkrip\transcribe.py" <video/audio> --outdir <folder> `
-  --context "Speakers: Suli (host) and William (Indodax CEO). Language: Indonesian mixed with English crypto jargon. Topic: Bitcoin, crypto, Indodax." `
+& "D:\akuvideo\.venv_transkrip\Scripts\python.exe" `
+  "D:\ChatGPT\skills\transkrip\transcribe.py" "<video_or_folder>" --outdir "<folder>" `
+  --language id --word-by-word `
+  --glossary "Term1,Term2,Term3" `
   --model small
 ```
 
-(faster-whisper 1.2.1 is already installed in the lemo-opuscar venv; ffmpeg is on PATH.)
+## Step 1 — Gather Context (Auto-Infer First, Never Leak Meta-Text)
 
-## Step 1 — Ask the user for context (REQUIRED before transcribing)
+Check any referenced project brief, folder name, or filename for:
+1. **Speakers** (names)
+2. **Base language** (`--language id` for Indonesian + English code-switching)
+3. **Domain terms (`--glossary`)** — brand names, crypto/business/tech jargon.
 
-Before running anything, ask the user (via ask_user_question / chat):
+Pass domain vocabulary via `--glossary` (avoid putting meta-instructions like `"Language: Indonesian"` into `--context`; `transcribe.py` also auto-strips meta-labels so Whisper never hallucinates `"Indonesia"`).
 
-1. **People / speakers** — who speaks in the video and their role (host/guest).
-2. **Language used** — pure Indonesian, mixed with English, regional dialect, etc.
-3. **Video topic** — the domain of technical terms (crypto, tech, health, ...).
+## Step 2 — RAM-Safe Transcription + Audio-Visual Lip-Sync Alignment
 
-All of this is optional: **if the user doesn't know or doesn't answer, proceed
-without context** (never block on it). The context is used to build the Whisper
-`initial_prompt` — this is the key to keeping domain terms spelled correctly
-(e.g. `captcha`, `HODL`, `XAUT`, `conviction`).
+- **Auto-RAM guard:** Checks free physical RAM and auto-caps `--workers` to fit safely in 80% of free RAM.
+- **Mouth-Movement + Never-Early Audio-Visual Gate (default ON for video):**
+  - Tracks speaker lip opening (`MAR`, `jawOpen`, lip velocity) via MediaPipe FaceLandmarker + 250–3800 Hz speech-band 10 ms RMS energy.
+  - Enforces a **strict never-early rule**: captions do not spawn until the speaker actually vocalizes (and moves their mouth after pauses), and disappear cleanly on silence. Falls back seamlessly to audio-only during B-roll.
+- **Caption modes:**
+  - `--word-by-word` — **1 word per spawn** (CapCut pop-in style, best for short-form precision).
+  - `--capcut` — tight short phrases (`<= 4` words, `0.25 s` pause gap).
+  - Default — natural pause lines (`0.35 s` pause gap, `6.0 s` max).
 
-Compose the initial_prompt as one or two sentences: mention the speakers' names
-plus the main domain terms.
+## Step 3 — Mandatory Conversational Sanity & Hallucination Review (Agent Pass)
 
-## Step 2 — Transcription (small model, parallel on CPU)
+After Pass 1 finishes, **ALWAYS read `transcript.md` and `coherence_flags` in `transkrip_report.json`** and ask:
+> *"Does every sentence make sense as real human speech / conversation? Are there any gibberish non-words (e.g. `sebrenge`, `melakua`), misheard English terms (`mode` vs `moat`), or hallucinated words the speaker never said?"*
 
-- Default model: `small` (fast, low RAM, accurate enough for normal podcasts).
-- Use `--model large-v3-turbo` if the user wants maximum accuracy (≈8× slower on CPU).
-- `medium` is the middle ground.
-- Audio is extracted via ffmpeg (mono 16 kHz), split into ~11-minute parts, and
-  transcribed **in parallel** (one process per part, 4 CPU threads each) with
-  `vad_filter=True`, `word_timestamps=True`, and the `initial_prompt` from Step 1.
-- Each part's offset is added back so timestamps stay absolute relative to the
-  original video.
-- **Per natural pause segmentation**: the result is then split at the speaker's
-  natural pauses using word-level timestamps — a silence gap between two words
-  longer than `--pause-gap` (default 0.35 s) starts a new line, and a line is
-  force-broken past `--max-seg` (default 6 s). A single long monologue by the
-  same speaker is therefore cut into short lines of ~2–5 s, **each with its own
-  timestamp** — segments do NOT wait for a speaker change to turn over.
+- If your environment can read audio (`read_file` on `.mp3`/`.wav`), verify any ambiguous low-confidence snippet directly against the audio.
+- Write an `edits.json` file targeting `idx` from `transcript_words.json`:
+  ```json
+  [
+    {"idx": 5, "op": "delete"},
+    {"idx": 11, "op": "split", "words": ["sebenarnya", "nggak", "gitu?"]},
+    {"idx": 48, "op": "replace", "text": "moat"}
+  ]
+  ```
+- Re-run with `--apply-edits` to regenerate `.srt`, `.md`, `.txt`, and `transcript_words.json` **with zero timestamp drift**:
+  ```powershell
+  & "D:\akuvideo\.venv_transkrip\Scripts\python.exe" `
+    "D:\ChatGPT\skills\transkrip\transcribe.py" "<video>" --outdir "<folder>" `
+    --word-by-word --apply-edits "<folder>\edits.json"
+  ```
 
-## Step 3 — On-point re-check (fix wrong words)
+## Step 4 — Output & Report
 
-Once the raw transcript exists, run a verification pass (automated in the script):
+Outputs 5 files in `--outdir`:
+1. `transcript.srt` — Audio-visual lip-synced subtitles (`--word-by-word`, `--capcut`, or natural pause).
+2. `transcript_words.json` — Per-word `idx`, `word`, `start`, `end`, `start_ms`, `end_ms`, `prob`.
+3. `transcript.md` — Clean readable markdown.
+4. `transcript_timestamped.txt` — `[HH:MM:SS.mmm - HH:MM:SS.mmm]` lines.
+5. `transkrip_report.json` — Duration, lip-sync stats, auto-fixes, manual edits, and `coherence_flags`.
 
-1. **Suspicious segments**: segments with low `avg_logprob` or high
-   `no_speech_prob` are re-sliced and re-transcribed; the old and new results are
-   compared — if they differ significantly, the re-sliced version wins (a short
-   transcription with the same context prompt is usually more accurate).
-2. **Glossary check**: important terms from the user's context are checked for
-   occurrence; phonetically similar misspellings are reported in the corrections.
-3. **Part boundaries**: artifacts at part joins (cut words / duplicates) are
-   cleaned up during the merge.
-
-For deeper corrections (person names, numbers), the agent may verify manually by
-listening to / referencing the video — record every correction in the report.
-
-## Step 4 — Output
-
-Write 3 files to `--outdir` (default: a `transkrip/` folder next to the media),
-**one line per natural pause** (~2–5 s per line, avg ≈3–4 s across a full video):
-
-1. `transcript.md` — clean markdown, optional chapter headings, dialog lines as
-   `**[MM:SS - MM:SS] Speaker**:` (speaker labels only when the user provided a
-   list of people; otherwise no labels).
-2. `transcript_timestamped.txt` — plain text with per-pause timestamps
-   `[MM:SS - MM:SS] Speaker: ...`.
-3. `transcript.srt` — standard SRT subtitles with millisecond timestamps per
-   short pause, ready to import into editing software (CapCut, Premiere,
-   DaVinci Resolve, ...).
-
-Report back to the user: duration summary, segment count, and the list of
-important corrections made in Step 3 (time → before → after).
-
-## Requirements & resource check (verify BEFORE running)
-
-The model is downloaded automatically on first run (HuggingFace cache, typically
-`%USERPROFILE%\.cache\huggingface`). Check the machine can actually fit it
-before starting, and tell the user what you checked:
-
-| Model | Download size (disk) | RAM in use (int8) | Speed on CPU (1 min audio) |
-|---|---|---|---|
-| `tiny` | ~75 MB | ~0.5 GB | ~5 s |
-| `base` | ~145 MB | ~0.7 GB | ~8 s |
-| `small` (default) | ~484 MB | ~1.3 GB | ~20 s |
-| `medium` | ~1.5 GB | ~2.7 GB | ~1 min |
-| `large-v3-turbo` | ~1.6 GB | ~4.5 GB | ~3 min |
-
-Rules of thumb:
-
-- **Disk**: free space ≥ 2× the model download size (download + unpacking).
-- **RAM**: free RAM ≥ the model's "RAM in use" × 1.5, **plus ~1.5 GB per
-  parallel worker** (`--workers`), since each worker loads its own model copy.
-  E.g. `small` with 4 workers ⇒ budget ~5 GB free RAM.
-- **Never exceed the machine's physical RAM** — int8 whisper models swap badly;
-  if free RAM is tight, lower `--workers` first, then drop the model size.
-- Quick check from the agent: `Get-CimInstance Win32_PhysicalMemory` (installed),
-  `Get-CimInstance Win32_OperatingSystem | Select FreePhysicalMemory` (free),
-  and `Get-PSDrive` for disk space. Do this **before** the first run and report
-  the numbers.
-- `faster-whisper` 1.2.1 + ffmpeg are already installed on this machine (venv:
-  `D:\ChatGPT\skills\lemo-opuscar\.venv\Scripts\python.exe`); a fresh machine
-  needs Python 3.8+ and `pip install faster-whisper`.
-
-If the chosen model doesn't fit, say so and offer the next smaller tier rather
-than silently swapping/thrashing.
-
-## Notes
-
-- Don't leave temp files outside the outdir; part WAVs are deleted when done
-  (the script does this automatically unless `--keep-parts` is passed).
+Always report the **exact saved file paths**, lip-sync stats, and every conversational fix applied.

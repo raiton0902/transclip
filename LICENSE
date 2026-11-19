@@ -1,0 +1,25 @@
+Commercial Single-Seat License — TransClip
+
+Copyright (c) 2026 raiton0902. All rights reserved.
+
+1. GRANT OF LICENSE
+Upon purchase via agensi.io (or authorized marketplace), you are granted a
+non-exclusive, non-transferable, worldwide license to install and use TransClip
+(including SKILL.md, transcribe.py, and accompanying documentation) for
+personal and commercial audio/video production, client work, and internal
+workflows.
+
+2. RESTRICTIONS
+You may NOT:
+- Redistribute, resell, sublicense, publish, or share the source code or skill
+  bundle as a standalone product, template, or competing skill.
+- Remove or alter copyright and license notices.
+
+3. THIRD-PARTY DEPENDENCIES
+TransClip invokes open-source tools installed separately by the user, including
+faster-whisper (MIT License), NumPy (BSD-3-Clause), and FFmpeg (LGPL/GPL).
+Those components remain subject to their respective licenses.
+
+4. DISCLAIMER
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED.
